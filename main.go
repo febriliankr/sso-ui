@@ -1,17 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
 
-	"github.com/gofiber/adaptor/v2"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/go-chi/chi"
 	"github.com/shenshouer/cas"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 var casURL = "https://sso.ui.ac.id/cas2"
@@ -28,54 +26,56 @@ type templateBinding struct {
 
 func main() {
 	url, _ := url.Parse(casURL)
-
 	client := cas.NewClient(&cas.Options{
 		URL: url,
 	})
 
-	app := fiber.New()
+	root := chi.NewRouter()
+	root.Use(client.Handle)
 
-	app.Use(adaptor.HTTPMiddleware(client.Handle), requestid.New(), logger.New())
-
-	app.Get("/a", adaptor.HTTPHandlerFunc(handle))
-	app.Get("/", handleFiber)
-
-	app.Listen(":9999")
-
-}
-
-func handle(w http.ResponseWriter, r *http.Request) {
-
-	binding := &templateBinding{
-		Username:   cas.Username(r),
-		Attributes: cas.Attributes(r),
-	}
-	log.Println(binding)
-	log.Println(cas.Username(r))
-
-}
-
-func handleFiber(c *fiber.Ctx) error {
-	var r http.Request
-	fc := c.Context()
-
-	err := fasthttpadaptor.ConvertRequest(fc, &r, true)
-	if err != nil {
-		panic(err)
+	server := &http.Server{
+		Addr:    ":9999",
+		Handler: client.Handle(root),
 	}
 
-	binding := &templateBinding{
-		Username:   cas.Username(&r),
-		Attributes: cas.Attributes(&r),
-	}
+	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "text/html")
 
-	if !cas.IsAuthenticated(&r) {
-		log.Println("is not authenticated!")
-		return c.Redirect(loginURL)
-	}
+		tmpl, err := template.New("index.html").Parse(index_html)
 
-	log.Println(binding)
-	return c.SendString("username: " + binding.Username)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, error_500, err)
+			return
+		}
+
+		binding := &templateBinding{
+			Username:   cas.Username(r),
+			Attributes: cas.Attributes(r),
+		}
+
+		if cas.Username(r) == "" {
+			log.Println("user is not logged in")
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprintf(w, htmlUnauthorized, err)
+			return
+		}
+
+		log.Println(binding)
+
+		html := new(bytes.Buffer)
+		if err := tmpl.Execute(html, binding); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, error_500, err)
+			return
+		}
+
+		html.WriteTo(w)
+	})
+
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 const index_html = `<!DOCTYPE html>
@@ -104,6 +104,17 @@ const error_500 = `<!DOCTYPE html>
   </head>
   <body>
     <h1>Error 500</h1>
+    <p>%v</p>
+  </body>
+</html>
+`
+const htmlUnauthorized = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Go to login page</title>
+  </head>
+  <body>
+    <h1>Go to login page</h1>
     <p>%v</p>
   </body>
 </html>
