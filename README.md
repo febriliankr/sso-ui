@@ -1,5 +1,3 @@
-## BACKUP CODE
-
 package main
 
 import (

@@ -54,14 +54,14 @@ func main() {
 			Attributes: cas.Attributes(r),
 		}
 
-		log.Println(binding)
-
-		if cas.Username(r) == "" {
+		if !cas.IsAuthenticated(r) {
 			log.Println("user is not logged in")
-			fmt.Fprintf(w, htmlUnauthorized, loginURL)
-
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprintf(w, notLoggedin, loginURL)
 			return
 		}
+
+		log.Println(binding)
 
 		html := new(bytes.Buffer)
 		if err := tmpl.Execute(html, binding); err != nil {
@@ -97,6 +97,18 @@ const index_html = `<!DOCTYPE html>
 </html>
 `
 
+const notLoggedin = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Log in here</title>
+  </head>
+  <body>
+    <h1>Log in here</h1>
+    <a href="%s">Login here</a>
+  </body>
+</html>
+`
+
 const error_500 = `<!DOCTYPE html>
 <html>
   <head>
@@ -105,17 +117,6 @@ const error_500 = `<!DOCTYPE html>
   <body>
     <h1>Error 500</h1>
     <p>%v</p>
-  </body>
-</html>
-`
-const htmlUnauthorized = `<!DOCTYPE html>
-<html>
-  <head>
-    <title>Go to login page</title>
-  </head>
-  <body>
-    <h1>Go to login page</h1>
-    <a href="%s">Login here</a>
   </body>
 </html>
 `
