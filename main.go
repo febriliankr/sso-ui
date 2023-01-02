@@ -54,14 +54,14 @@ func main() {
 			Attributes: cas.Attributes(r),
 		}
 
+		log.Println(binding)
+
 		if cas.Username(r) == "" {
 			log.Println("user is not logged in")
-			w.WriteHeader(http.StatusUnauthorized)
-			fmt.Fprintf(w, htmlUnauthorized, err)
+			fmt.Fprintf(w, htmlUnauthorized, loginURL)
+
 			return
 		}
-
-		log.Println(binding)
 
 		html := new(bytes.Buffer)
 		if err := tmpl.Execute(html, binding); err != nil {
@@ -115,7 +115,7 @@ const htmlUnauthorized = `<!DOCTYPE html>
   </head>
   <body>
     <h1>Go to login page</h1>
-    <p>%v</p>
+    <a href="%s">Login here</a>
   </body>
 </html>
 `
